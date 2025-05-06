@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Device Calibration</title>
+
+    <!-- Include HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.2"></script>
+
+    <!-- Global styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+
+    <!-- Add any other head content -->
+</head>
+<body>
+
+    <!-- Main content of the page, injected by child templates -->
+    <div id="content">
+        {% block content %}{% endblock %}
+    </div>
+
+
+</body>
+</html>

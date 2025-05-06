@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block content %}
+<video id="camera" autoplay playsinline></video>
+
+<!-- Canvas for circular mask -->
+<canvas id="mask" style="position:absolute; top:0; left:0;"></canvas>
+
+<!-- Canvas for UI overlays (e.g. crop box) -->
+<canvas id="overlay" style="position:absolute; top:0; left:0;"></canvas>
+
+<script>
+const x = {{ x|tojson }};
+const y = {{ y|tojson }};
+const diameter = {{ diameter|tojson }};
+</script>
+
+<script src="{{ url_for('static', filename='js/circular_ui.js') }}"></script>
+{% endblock %}

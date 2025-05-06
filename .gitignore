@@ -1,0 +1,48 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual environment
+venv/
+env/
+
+# Environment variables / secrets
+.env
+*.env
+
+# Flask instance folder (if using app.instance_path)
+instance/
+
+# Pytest / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.pytest_cache/
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# SQLite DBs (optional, if you use these locally)
+*.sqlite3
+*.db
+
+# Mac/Linux system files
+.DS_Store
+
+# Config file compiled files
+config.pyc

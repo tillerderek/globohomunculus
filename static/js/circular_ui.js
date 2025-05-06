@@ -1,0 +1,50 @@
+const video = document.getElementById('camera');
+const canvas = document.getElementById('mask');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+const octx = overlay.getContext('2d');
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  drawMask();
+}
+
+function drawMask() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = 'black';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath();
+  ctx.arc(x, y, diameter / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// Start camera
+navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+  video.srcObject = stream;
+}).catch(err => {
+  alert("Camera access denied.");
+});
+
+window.addEventListener('resize', resize);
+resize();
+
+function drawOverlay() {
+  overlay.width = window.innerWidth;
+  overlay.height = window.innerHeight;
+
+  octx.clearRect(0, 0, overlay.width, overlay.height);
+
+  // Draw a box inside the circular area (centered)
+  const boxSize = diameter * 0.6; // Smaller than circle
+  const boxX = x - boxSize / 2;
+  const boxY = y - boxSize / 2;
+
+  octx.strokeStyle = 'red';
+  octx.lineWidth = 2;
+  octx.strokeRect(boxX, boxY, boxSize, boxSize);
+}
