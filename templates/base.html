@@ -1,25 +1,77 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Device Calibration</title>
 
     <!-- Include HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.2"></script>
 
     <!-- Global styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/styles.css') }}"
+    />
 
     <!-- Add any other head content -->
-</head>
-<body>
-
+  </head>
+  <body>
     <!-- Main content of the page, injected by child templates -->
-    <div id="content">
-        {% block content %}{% endblock %}
+    <div id="content">{% block content %}{% endblock %}</div>
+
+    <div
+      id="recalibrate-indicator"
+      style="
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: rgba(0, 0, 0, 0.85);
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-family: sans-serif;
+        display: none;
+        z-index: 1000;
+        transition: opacity 0.3s ease;
+      "
+    >
+      Hold ESC to Recalibrate...
     </div>
 
+    <script>
 
-</body>
+      function playMusic() {
+        fetch('/play_music')
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.status === 'success' && data.music_files.length > 0) {
+              console.log('Music files:', data.music_files);
+
+              const audio = document.getElementById('music-player');
+              audio.src = `/play/${data.music_files[0]}`; // This will use the new /play/<filename> route
+              audio.style.display = 'block'; // Optionally show the audio player
+              audio.play();
+
+
+              // 🆕 Update metadata display
+              const metadata = document.getElementById('metadata-content');
+              metadata.innerHTML = `
+              <div><strong>${data.song_info.artist}</strong></div>
+              <div>${data.song_info.title}</div>
+              <div>${data.song_info.year}</div>
+              <div>${data.country}</div>
+            `;
+            } else {
+              console.error(data.message || 'No music files found');
+            }
+          })
+          .catch((error) => {
+            console.error('Error playing music:', error);
+          });
+      }
+    </script>
+  </body>
 </html>

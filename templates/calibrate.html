@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 
 {% block content %}
-<canvas id="view"></canvas>
+<!-- Camera preview -->
+<video id="camera" autoplay playsinline style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;"></video>
+
+<!-- Canvas for drawing calibration UI -->
+<canvas id="view" style="position: absolute; top: 0; left: 0;"></canvas>
 
 <script src="{{ url_for('static', filename='js/calibrate.js') }}"></script>
 {% endblock %}

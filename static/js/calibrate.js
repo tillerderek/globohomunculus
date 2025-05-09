@@ -1,3 +1,33 @@
+// Start camera with back-facing camera
+function initCamera() {
+  const video = document.createElement('video');
+  video.setAttribute('id', 'camera');
+  video.setAttribute('autoplay', true);
+  video.setAttribute('playsinline', true);
+  video.style.position = 'absolute';
+  video.style.top = 0;
+  video.style.left = 0;
+  video.style.width = '100%';
+  video.style.height = '100%';
+  video.style.objectFit = 'cover';
+  video.style.zIndex = -1; // Ensure canvas is on top
+
+  document.body.insertBefore(video, document.body.firstChild);
+
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'environment' },
+    audio: false
+  })
+  .then((stream) => {
+    video.srcObject = stream;
+  })
+  .catch((err) => {
+    console.error("Camera access error:", err);
+    alert("Could not access camera. Please check permissions and try again.");
+  });
+}
+initCamera();
+
 const canvas = document.getElementById('view');
 const ctx = canvas.getContext('2d');
 
