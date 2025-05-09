@@ -22,56 +22,54 @@
 
     <div
       id="recalibrate-indicator"
-      style="
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background-color: rgba(0, 0, 0, 0.85);
-        color: white;
-        padding: 12px 20px;
-        border-radius: 8px;
-        font-size: 1rem;
-        font-family: sans-serif;
-        display: none;
-        z-index: 1000;
-        transition: opacity 0.3s ease;
-      "
     >
       Hold ESC to Recalibrate...
     </div>
 
-    <script>
+<script>
+  function playMusic() {
+    fetch('/play_music')
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.status === 'success' && data.music_files.length > 0) {
+          console.log('Music files:', data.music_files);
 
-      function playMusic() {
-        fetch('/play_music')
-          .then((response) => response.json())
-          .then((data) => {
-            if (data.status === 'success' && data.music_files.length > 0) {
-              console.log('Music files:', data.music_files);
+          const audio = document.getElementById('music-player');
+          audio.src = `/play/${data.music_files[0]}`;
+          audio.style.display = 'block';
+          audio.play();
 
-              const audio = document.getElementById('music-player');
-              audio.src = `/play/${data.music_files[0]}`; // This will use the new /play/<filename> route
-              audio.style.display = 'block'; // Optionally show the audio player
-              audio.play();
+          // 🆕 Update metadata display
+          const metadata = document.getElementById('metadata-content');
+          metadata.innerHTML = `
+            <div><strong>${data.song_info.artist}</strong></div>
+            <div>${data.song_info.title}</div>
+            <div>${data.song_info.year}</div>
+            <div>${data.country}</div>
+          `;
+        } else {
+          console.error(data.message || 'No music files found');
+        }
+      })
+      .catch((error) => {
+        console.error('Error playing music:', error);
+      });
+  }
+
+  // 🆕 Add key watchers for [ and ] and spacebar
+  document.addEventListener('keydown', function (e) {
+    if (e.key === '[') {
+      window.location.href = "{{ url_for('navigate_decades', direction='prev') }}";
+    } else if (e.key === ']') {
+      window.location.href = "{{ url_for('navigate_decades', direction='next') }}";
+    } else if (e.code === 'Space') {
+      e.preventDefault(); // prevent page scroll
+      console.log('Spacebar pressed - playing music for selected decade');
+      playMusic();
+    }
+  });
+</script>
 
 
-              // 🆕 Update metadata display
-              const metadata = document.getElementById('metadata-content');
-              metadata.innerHTML = `
-              <div><strong>${data.song_info.artist}</strong></div>
-              <div>${data.song_info.title}</div>
-              <div>${data.song_info.year}</div>
-              <div>${data.country}</div>
-            `;
-            } else {
-              console.error(data.message || 'No music files found');
-            }
-          })
-          .catch((error) => {
-            console.error('Error playing music:', error);
-          });
-      }
-    </script>
   </body>
 </html>

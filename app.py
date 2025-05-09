@@ -241,7 +241,7 @@ def image_processing():
             return jsonify({'status': 'error', 'message': 'Failed to decode image'}), 400
 
         # Crop the center
-        cropped = crop_center(image, 375, 125)
+        cropped = crop_center(image, 200, 350)
 
         # Convert to grayscale and threshold
         gray = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)

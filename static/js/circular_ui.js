@@ -19,6 +19,9 @@ const overlay = document.getElementById('overlay');
 const octx = overlay.getContext('2d');
 const countryDisplay = document.getElementById('country-display');
 
+let lastImageCaptureTime = Date.now();
+let autoCameraShutdownTimer = null;
+
 // Use the x, y, and diameter values passed from Flask
 // These variables should be declared in the HTML template
 
@@ -28,7 +31,45 @@ function resize() {
   overlay.width = window.innerWidth;
   overlay.height = window.innerHeight;
   drawMask();
+  positionOverlayContent(); // Add this line
   if (!escHeld) drawRadarOverlay();
+}
+
+function positionOverlayContent() {
+  const overlayContent = document.getElementById('overlay-content');
+  if (overlayContent) {
+    // Position the overlay content precisely over the circular mask area
+    overlayContent.style.left = x - diameter / 2 + 'px';
+    overlayContent.style.top = y - diameter / 2 + 'px';
+    overlayContent.style.width = diameter + 'px';
+    overlayContent.style.height = diameter + 'px';
+
+    // Adjust metadata display for better positioning within circle
+    const metadataDisplay = document.getElementById('metadata-display');
+    if (metadataDisplay) {
+      // If the circle is very small, adjust font size
+      if (diameter < 400) {
+        metadataDisplay.style.fontSize = 'clamp(14px, 1.8vw, 20px)';
+      }
+    }
+
+    // Adjust decades navigation position based on circle size
+    const decadesNav = document.getElementById('decades-nav');
+    if (decadesNav) {
+      // Adjust vertical position based on circle size
+      const bottomPosition = diameter < 500 ? '12%' : '15%';
+      decadesNav.style.bottom = bottomPosition;
+
+      // For very small circles, make buttons smaller
+      if (diameter < 400) {
+        const buttons = decadesNav.querySelectorAll('button');
+        buttons.forEach((button) => {
+          button.style.padding = '3px 6px';
+          button.style.fontSize = '0.9rem';
+        });
+      }
+    }
+  }
 }
 
 function drawMask() {
@@ -409,6 +450,24 @@ function captureAndSend() {
       console.error('Error:', error);
       handleImageProcessingError();
     });
+  lastImageCaptureTime = Date.now(); // 🕒 Update activity timestamp
+  resetCameraShutdownTimer(); // 🔁 Restart shutdown timer
+}
+
+function resetCameraShutdownTimer() {
+  if (autoCameraShutdownTimer) {
+    clearTimeout(autoCameraShutdownTimer);
+  }
+
+  autoCameraShutdownTimer = setTimeout(() => {
+    const video = document.getElementById('camera');
+    if (video && video.srcObject) {
+      const tracks = video.srcObject.getTracks();
+      tracks.forEach((track) => track.stop());
+      video.srcObject = null;
+      console.log('Camera auto-shutdown after inactivity');
+    }
+  }, 180000); // 3 minutes = 180,000 ms
 }
 
 // Helper function to convert dataURL to Blob
@@ -643,9 +702,16 @@ function startRecalibrationOverlay() {
   escStartTime = Date.now();
   scanActive = false;
 
+  // Cancel any running animation frames
   if (scanAnimationFrame) {
     cancelAnimationFrame(scanAnimationFrame);
     scanAnimationFrame = null;
+  }
+
+  // Hide the overlay content during recalibration
+  const overlayContent = document.getElementById('overlay-content');
+  if (overlayContent) {
+    overlayContent.style.visibility = 'hidden'; // Hide but keep in the DOM
   }
 
   animateRecalibrationOverlay();
@@ -658,6 +724,14 @@ function stopRecalibrationOverlay(triggerRedirect = false) {
   if (escAnimationFrame) {
     cancelAnimationFrame(escAnimationFrame);
     escAnimationFrame = null;
+  }
+
+  // Show the overlay content again if we're not redirecting
+  if (!triggerRedirect) {
+    const overlayContent = document.getElementById('overlay-content');
+    if (overlayContent) {
+      overlayContent.style.visibility = 'visible';
+    }
   }
 
   scanActive = true;
@@ -674,10 +748,14 @@ function animateRecalibrationOverlay() {
   const duration = 3000;
   const progress = Math.min(elapsed / duration, 1);
 
-  // Clear and redraw the overlay
+  // Completely clear the overlay before drawing recalibration UI
   overlay.width = window.innerWidth;
   overlay.height = window.innerHeight;
   octx.clearRect(0, 0, overlay.width, overlay.height);
+
+  // Also clear the mask canvas to remove any potential artifacts
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawMask(); // Redraw the mask
 
   // Save the current context state
   octx.save();
@@ -763,14 +841,17 @@ function animateRecalibrationOverlay() {
 function toggleMetadataDisplay() {
   const metadataDisplay = document.getElementById('metadata-display');
   if (metadataDisplay) {
-    metadataDisplay.style.display = metadataDisplay.style.display === 'none' ? 'block' : 'none';
+    metadataDisplay.style.display =
+      metadataDisplay.style.display === 'none' ? 'block' : 'none';
   }
 }
 
 // Initialize
+// Initialize
 initCamera();
 window.addEventListener('resize', resize);
 resize();
+positionOverlayContent(); // Position the overlay content when page loads
 drawRadarOverlay(); // Start the radar animation
 
 // Make sure to add these keyboard event listeners in your HTML or add them here
@@ -788,14 +869,36 @@ document.addEventListener('keydown', function (e) {
     startRecalibrationOverlay();
   }
 
-  // Period key to toggle metadata
   if (e.key === '+' && !isCameraProcessing) {
-    toggleMetadataDisplay();
+    const video = document.getElementById('camera');
+
+    if (!video.srcObject) {
+      // Camera is off, so turn it on
+      initCamera();
+      resetCameraShutdownTimer(); // Start auto-shutdown timer
+
+      // Hide metadata when camera is on
+      document.getElementById('metadata-display').style.display = 'none';
+    } else {
+      // Camera is on, so turn it off
+      const tracks = video.srcObject.getTracks();
+      tracks.forEach((track) => track.stop());
+      video.srcObject = null;
+
+      // Cancel auto-shutdown if it was running
+      if (autoCameraShutdownTimer) {
+        clearTimeout(autoCameraShutdownTimer);
+        autoCameraShutdownTimer = null;
+      }
+
+      // Show metadata when camera is off
+      document.getElementById('metadata-display').style.display = 'block';
+    }
   }
 
   // Subtract key or NumpadSubtract to navigate home
   if (e.key === 'Subtract' || e.code === 'NumpadSubtract') {
-    window.location.href = "/";
+    window.location.href = '/';
   }
 });
 
@@ -808,5 +911,3 @@ document.addEventListener('keyup', function (e) {
     stopRecalibrationOverlay(completed);
   }
 });
-
-
