@@ -5,9 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Device Calibration</title>
 
-    <!-- Include HTMX -->
-    <script src="https://unpkg.com/htmx.org@1.9.2"></script>
-
     <!-- Global styles -->
     <link
       rel="stylesheet"
@@ -19,58 +16,38 @@
   <body>
     <!-- Main content of the page, injected by child templates -->
     <div id="content">{% block content %}{% endblock %}</div>
+    <audio class="hidden" id="feedback-sound" src="{{ url_for('static', filename='sounds/decadeswitch.wav') }}" preload="auto"></audio>
+    <audio class="hidden" id="feedback-sound2" src="{{ url_for('static', filename='sounds/decadeswatch.wav') }}" preload="auto"></audio>
 
-    <div
-      id="recalibrate-indicator"
-    >
-      Hold ESC to Recalibrate...
-    </div>
+
+    <div id="recalibrate-indicator">Hold ESC to Recalibrate...</div>
 
 <script>
-  function playMusic() {
-    fetch('/play_music')
-      .then((response) => response.json())
-      .then((data) => {
-        if (data.status === 'success' && data.music_files.length > 0) {
-          console.log('Music files:', data.music_files);
+  const feedbackSound = document.getElementById("feedback-sound");
+  const feedbackSound2 = document.getElementById("feedback-sound2");
 
-          const audio = document.getElementById('music-player');
-          audio.src = `/play/${data.music_files[0]}`;
-          audio.style.display = 'block';
-          audio.play();
-          audio.onended = () => {
-            playMusic(); // Fetch and play the next song when current one ends
-          };
-
-          const metadata = document.getElementById('metadata-content');
-          metadata.innerHTML = `
-            <div><strong>${data.song_info.artist}</strong></div>
-            <div>${data.song_info.title}</div>
-            <div>${data.song_info.year}</div>
-            <div>${data.country}</div>
-          `;
-        } else {
-          console.error(data.message || 'No music files found');
-        }
-      })
-      .catch((error) => {
-        console.error('Error playing music:', error);
-      });
-  }
-
-  document.addEventListener('keydown', function (e) {
-    if (e.key === '[') {
+document.addEventListener("keydown", function (e) {
+  if (e.key === "[") {
+    e.preventDefault();
+    feedbackSound2.currentTime = 0;  // reset sound 2
+    feedbackSound2.play().catch(err => console.warn("Audio play error:", err));  // play sound 2
+    setTimeout(() => {
       window.location.href = "{{ url_for('navigate_decades', direction='prev') }}";
-    } else if (e.key === ']') {
+    }, 250);
+  } else if (e.key === "]") {
+    e.preventDefault();
+    feedbackSound.currentTime = 0;  // reset sound 1
+    feedbackSound.play().catch(err => console.warn("Audio play error:", err));  // play sound 1
+    setTimeout(() => {
       window.location.href = "{{ url_for('navigate_decades', direction='next') }}";
-    } else if (e.code === 'Space') {
-      e.preventDefault(); // prevent page scroll
-      console.log('Spacebar pressed - playing music for selected decade');
-      playMusic();
-    }
-  });
-</script>
+    }, 250);
+  } else if (e.code === "Space") {
+    e.preventDefault();
+    playMusic();
+  }
+});
 
+</script>
 
   </body>
 </html>

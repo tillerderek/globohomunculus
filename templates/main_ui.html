@@ -7,15 +7,23 @@
 <div id="overlay-content">
   
   <div id="metadata-display">
-    {% if country_code %}
-    <div id="country-name-display">
-      <h2>{{ country_name or country_code }}</h2>
-    </div>
-  {% endif %}
+{% if country_code and not global_shuffle %}
+  <div id="country-name-display">
+    <h2>{{ country_name or country_code }}</h2>
+  </div>
+{% endif %}
     <div id="metadata-content"></div>
+    <div id="status"></div>
+    <!-- Added shuffle indicator -->
+    <div id="shuffle-indicator" class="hidden">
+      <div class="shuffle-progress-bar">
+        <div class="shuffle-progress"></div>
+      </div>
+      <div class="shuffle-text">INITIATING GLOBAL SHUFFLE</div>
+    </div>
   </div>
 
-  {% if country_code %}
+  {% if country_code and not global_shuffle %}
   <div id="decades-nav">
     <div>
       <button
@@ -36,6 +44,7 @@
 </div>
 
 <audio id="music-player" controls></audio>
+<audio id="shuffleSound" src="{{ url_for('static', filename='sounds/shuffler.wav') }}" preload="auto" loop></audio>
 
 <script>
   const x = {{ x|tojson }};
@@ -46,25 +55,316 @@
 <script src="{{ url_for('static', filename='js/circular_ui.js') }}"></script>
 <script>
   const musicPlayer = document.getElementById('music-player');
+  const metadataContent = document.getElementById('metadata-content');
+  const statusDisplay = document.getElementById('status');
+  const shuffleIndicator = document.getElementById('shuffle-indicator');
+  const shuffleProgressBar = document.querySelector('.shuffle-progress');
+  const shuffleSound = document.getElementById('shuffleSound');
 
-  document.addEventListener('keydown', function (e) {
-    if (e.code === 'Numpad4') {
-      // Skip backward (e.g., go back 10 seconds)
-      musicPlayer.currentTime = Math.max(0, musicPlayer.currentTime - 10);
-    } else if (e.code === 'Numpad5') {
-      // Play/Pause toggle
-      if (musicPlayer.paused) {
-        musicPlayer.play();
-      } else {
-        musicPlayer.pause();
+  musicPlayer.addEventListener('ended', () => {
+    console.log('Track ended. Playing next track...');
+    playMusic();
+  });
+
+  // Function to update the display with song info
+  function updateSongDisplay(songInfo) {
+    if (songInfo) {
+      metadataContent.innerHTML = `
+        <p><strong>${songInfo.artist || 'Unknown Artist'}</strong></p>
+        <p>${songInfo.title || 'Unknown Title'}</p>
+        <p>${songInfo.year || ''}</p>
+      `;
+    } else {
+      metadataContent.innerHTML = '';
+    }
+  }
+
+  // Unified function to handle playing songs from either endpoint
+  function playSong(data) {
+    console.log('Playing song from data:', data);
+    
+    // Handle both response formats (either status/music_files or success/file)
+    if ((data.status === 'success' && data.music_files && data.music_files.length > 0) || 
+        (data.success && data.file)) {
+      
+      // Determine the file to play based on response format
+      const filename = data.music_files ? data.music_files[0] : 
+                      (typeof data.file === 'string' ? data.file : 
+                      (data.file ? data.file.split('/').pop() : null));
+      
+      if (!filename) {
+        console.error('No valid filename found in response data:', data);
+        statusDisplay.innerText = 'Error: No valid file found';
+        return;
       }
-    } else if (e.code === 'Numpad6') {
-      // Skip forward (e.g., jump ahead 10 seconds)
-      musicPlayer.currentTime = Math.min(musicPlayer.duration, musicPlayer.currentTime + 10);
+      
+      const audioSrc = `/play/${encodeURIComponent(filename)}`;
+      console.log('Setting audio source to:', audioSrc);
+      
+      musicPlayer.src = audioSrc;
+      
+      musicPlayer.onloadeddata = () => console.log('Audio loaded successfully');
+      musicPlayer.onerror = (e) => {
+        console.error('Audio error:', e);
+        statusDisplay.innerText = 'Error loading audio. Trying next song...';
+        // If error, try playing another song after a short delay
+        setTimeout(playMusic, 1000);
+      };
+      
+      musicPlayer.play()
+        .then(() => console.log('Playback started successfully'))
+        .catch(err => {
+          console.error('Playback error:', err);
+          statusDisplay.innerText = 'Error playing audio: ' + err.message;
+        });
+      
+      // Update song info display - handle both response formats
+      if (data.song_info) {
+        updateSongDisplay(data.song_info);
+      } else if (data.metadata) {
+        updateSongDisplay(data.metadata);
+      }
+      
+      // Update status display
+    const country = data.country || (data.metadata && data.metadata.country_name) || 'Unknown';
+    statusDisplay.innerText = `Playing music from ${country}`;
+      
+    } else {
+      const errorMsg = data.message || 'Unknown error playing music';
+      console.error('Error playing music:', errorMsg, data);
+      statusDisplay.innerText = errorMsg;
+    }
+  }
+
+  // Play music function for the button and skip function
+  function playMusic() {
+    fetch('/play_music')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+      })
+      .then(data => playSong(data))
+      .catch(error => {
+        console.error('Error fetching music:', error);
+        statusDisplay.innerText = 'Error playing music: ' + error.message;
+      });
+  }
+
+  let keyHoldTimeout = null;
+  let holdStart = null;
+  let progressInterval = null;
+  const HOLD_DURATION = 6000; // 6 seconds in milliseconds
+  
+  // Function to start the shuffle activation sequence
+  function startShuffleSequence() {
+    holdStart = Date.now();
+    
+    // Show the shuffle indicator
+    shuffleIndicator.classList.remove('hidden');
+    shuffleProgressBar.style.width = '0%';
+    
+    // Start shuffle sound
+    shuffleSound.currentTime = 0;
+    shuffleSound.play()
+      .then(() => console.log('Shuffle sound started playing'))
+      .catch(err => console.warn('Shuffle sound play error:', err));
+    
+    // Start progress animation
+    progressInterval = setInterval(() => {
+      const elapsed = Date.now() - holdStart;
+      const progress = Math.min((elapsed / HOLD_DURATION) * 100, 100);
+      shuffleProgressBar.style.width = `${progress}%`;
+      
+      // Add pulsing effect as it gets closer to completion
+      if (progress > 75) {
+        shuffleIndicator.classList.add('pulse');
+      }
+    }, 50);
+    
+    // Set timeout for completed hold
+    keyHoldTimeout = setTimeout(() => {
+      activateGlobalShuffle();
+    }, HOLD_DURATION);
+  }
+  
+  // Function to cancel the shuffle activation sequence
+  function cancelShuffleSequence() {
+    if (keyHoldTimeout) {
+      clearTimeout(keyHoldTimeout);
+      keyHoldTimeout = null;
+    }
+    
+    if (progressInterval) {
+      clearInterval(progressInterval);
+      progressInterval = null;
+    }
+    
+    // Stop the shuffle sound
+    shuffleSound.pause();
+    shuffleSound.currentTime = 0;
+    
+    // Hide the shuffle indicator
+    shuffleIndicator.classList.add('hidden');
+    shuffleIndicator.classList.remove('pulse');
+  }
+  
+  // Function to activate global shuffle
+  function activateGlobalShuffle() {
+    // Stop sound and animations
+    shuffleSound.pause();
+    shuffleSound.currentTime = 0;
+    clearInterval(progressInterval);
+    progressInterval = null;
+    keyHoldTimeout = null;
+    
+    // Show completion state
+    shuffleProgressBar.style.width = '100%';
+    shuffleIndicator.classList.add('activated');
+    
+    // Make API call to activate global shuffle
+    fetch("/global_shuffle", { method: "POST" })
+      .then(res => {
+        console.log('Global shuffle response status:', res.status);
+        if (!res.ok) {
+          throw new Error(`Server responded with ${res.status}: ${res.statusText}`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        console.log('Global shuffle data:', data);
+        playSong(data);
+
+        document.getElementById("country-name-display")?.classList.add("hidden");
+        document.getElementById("decades-nav")?.classList.add("hidden");
+        
+        // Hide shuffle indicator after a delay
+        setTimeout(() => {
+          shuffleIndicator.classList.add('hidden');
+          shuffleIndicator.classList.remove('activated', 'pulse');
+        }, 2000);
+      })
+      .catch(error => {
+        console.error('Fetch error:', error);
+        statusDisplay.innerText = 'Error starting global shuffle: ' + error.message;
+        shuffleIndicator.classList.add('hidden');
+      });
+  }
+
+  document.addEventListener('keydown', function(e) {
+    switch (e.code) {
+      case 'Numpad1':
+        if (!keyHoldTimeout) {
+          startShuffleSequence();
+        }
+        break;
+
+      case 'Numpad4':
+        // Dummy handler for skip back to avoid popping issue
+        console.log('Numpad4 pressed: skip back disabled currently.');
+        break;
+
+      case 'Numpad5':
+        // Play/Pause toggle
+        if (musicPlayer.paused) {
+          musicPlayer.play();
+        } else {
+          musicPlayer.pause();
+        }
+        break;
+
+      case 'Numpad6':
+        // Skip forward track (simulate skipping to next track)
+        console.log('Numpad6 pressed: skipping forward track.');
+        playMusic(); // Get a new song using the updated playMusic function
+        break;
+
+      default:
+        break;
     }
   });
+
+  document.addEventListener('keyup', function(e) {
+    if (e.code === 'Numpad1') {
+      if (keyHoldTimeout) {
+        cancelShuffleSequence();
+      }
+    }
+  });
+  
+  // Also enable the Play Music button
+  document.getElementById('playMusicButton').style.display = 'none';
 </script>
 
-
-
+<style>
+  /* Retro future sci-fi style for shuffle indicator */
+  #shuffle-indicator {
+    position: relative;
+    margin-top: 15px;
+    padding: 10px;
+    background-color: rgba(0, 0, 0, 0.7);
+    border: 1px solid #00ffcc;
+    border-radius: 4px;
+    box-shadow: 0 0 10px rgba(0, 255, 204, 0.5);
+    transition: all 0.3s ease;
+  }
+  
+  .shuffle-progress-bar {
+    height: 10px;
+    background-color: rgba(0, 255, 204, 0.3);
+    border-radius: 5px;
+    margin-bottom: 8px;
+    overflow: hidden;
+  }
+  
+  .shuffle-progress {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #00ffcc, #0066ff);
+    box-shadow: 0 0 15px rgba(0, 255, 204, 0.8);
+    transition: width 0.05s linear;
+  }
+  
+  .shuffle-text {
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    color: #00ffcc;
+    text-align: center;
+    letter-spacing: 1px;
+    text-shadow: 0 0 5px rgba(0, 255, 204, 0.8);
+  }
+  
+  /* Pulse animation for shuffle indicator */
+  @keyframes pulse {
+    0% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(1.02); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+  
+  #shuffle-indicator.pulse {
+    animation: pulse 0.5s infinite;
+  }
+  
+  /* Activated state */
+  #shuffle-indicator.activated {
+    border-color: #ff00cc;
+    box-shadow: 0 0 20px rgba(255, 0, 204, 0.7);
+  }
+  
+  #shuffle-indicator.activated .shuffle-progress {
+    background: linear-gradient(90deg, #00ffcc, #ff00cc);
+    box-shadow: 0 0 20px rgba(255, 0, 204, 0.8);
+  }
+  
+  #shuffle-indicator.activated .shuffle-text {
+    color: #ff00cc;
+    text-shadow: 0 0 8px rgba(255, 0, 204, 0.8);
+  }
+  
+  /* Hidden state */
+  .hidden {
+    display: none !important;
+  }
+</style>
 {% endblock %}

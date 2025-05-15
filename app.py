@@ -21,6 +21,7 @@ import json
 from PIL import Image
 from functools import wraps
 import random
+import traceback
 
 app = Flask(__name__)
 app.config.from_object(DevelopmentConfig)
@@ -51,7 +52,10 @@ def load_countries():
             "DEU": "Germany",
             "NGA": "Nigeria",
         }
-
+# Load the countries at app startup
+COUNTRIES = load_countries()
+# Reverse lookup (name to code)
+COUNTRY_CODES = {v: k for k, v in COUNTRIES.items()}
 
 # Decorator to ensure calibration is done
 def require_calibration(f):
@@ -157,14 +161,84 @@ def pick_song(country_code, decade, exclude_path=None):
         except:
             continue
 
+    # Add country info to metadata
+    country_code, country_name = get_country_from_path(song_path)
+    metadata["country_code"] = country_code
+    metadata["country_name"] = country_name
+
     return song_path, metadata
 
 
+def pick_random_song_from_archive():
+    mp3_files = []
+    print("[DEBUG] Starting to walk through archive to find mp3 files...")
+    for root, dirs, files in os.walk(ARCHIVE_PATH):
+        for fname in files:
+            if fname.lower().endswith('.mp3'):
+                full_path = os.path.join(root, fname)
+                mp3_files.append(full_path)
+    print(f"[DEBUG] Found {len(mp3_files)} mp3 files in archive.")
 
-# Load the countries at app startup
-COUNTRIES = load_countries()
-# Reverse lookup (name to code)
-COUNTRY_CODES = {v: k for k, v in COUNTRIES.items()}
+    if not mp3_files:
+        print("[DEBUG] No mp3 files found, returning None.")
+        return None, None
+
+    chosen = random.choice(mp3_files)
+    print(f"[DEBUG] Randomly chosen mp3 file: {chosen}")
+
+    meta_path = os.path.splitext(chosen)[0] + '.json'
+    metadata = {}
+    if os.path.exists(meta_path):
+        print(f"[DEBUG] Metadata JSON found at: {meta_path}, loading...")
+        try:
+            with open(meta_path, 'r') as f:
+                metadata = json.load(f)
+            print(f"[DEBUG] Metadata loaded: {metadata}")
+        except Exception as e:
+            print(f"[DEBUG] Error loading metadata JSON: {e}")
+    else:
+        print(f"[DEBUG] No metadata JSON found for chosen mp3.")
+
+    country_code, country_name = get_country_from_path(chosen)
+    print(f"[DEBUG] Country code from path: {country_code}")
+    print(f"[DEBUG] Country name from path: {country_name}")
+
+    metadata["country_code"] = country_code
+    metadata["country_name"] = country_name
+
+    print(f"[DEBUG] Final metadata sent to front end: {metadata}")
+
+    return chosen, metadata
+
+
+
+def get_country_from_path(song_path):
+    try:
+        parts = os.path.normpath(song_path).split(os.sep)
+        print(f"[DEBUG] song_path: {song_path}")
+        print(f"[DEBUG] parts: {parts}")
+
+        if "archive" in parts:
+            archive_index = parts.index("archive")
+            print(f"[DEBUG] archive_index: {archive_index}")
+            country_code = parts[archive_index + 1]
+            print(f"[DEBUG] country_code from path: {country_code}")
+
+            country_name = COUNTRIES.get(country_code, "Unknown Country")
+            print(f"[DEBUG] country_name: {country_name}")
+
+            return country_code, country_name
+        else:
+            print("[DEBUG] 'archive' not in path")
+    except Exception as e:
+        print(f"[ERROR] Failed in get_country_from_path: {e}")
+
+    return None, "Unknown Country"
+
+
+
+
+
 
 # ------------------------------
 # Routes
@@ -173,9 +247,12 @@ COUNTRY_CODES = {v: k for k, v in COUNTRIES.items()}
 
 @app.route("/")
 def index():
+    for key in ["current_country", "song", "decade", "selected_decade", "global_shuffle"]:
+        session.pop(key, None) 
     if all(k in session for k in ["x", "y", "diameter"]):
         return redirect(url_for("main_interface"))
     return redirect(url_for("calibrate"))
+
 
 
 @app.route("/calibrate")
@@ -213,6 +290,7 @@ def main_interface():
         selected_decade = session.get("selected_decade")
 
     song_info = session.get("song_info")
+    global_shuffle = session.get("global_shuffle", False)  # ✅ Add this
 
     return render_template(
         "main_ui.html",
@@ -224,7 +302,9 @@ def main_interface():
         decades=decades,
         selected_decade=selected_decade,
         song_info=song_info,
+        global_shuffle=global_shuffle 
     )
+
 
 
 @app.route("/image_processing", methods=["POST"])
@@ -283,6 +363,7 @@ def image_processing():
             # If there are decades available, select the first one by default
             if decades:
                 session["selected_decade"] = decades[0]
+                session["global_shuffle"] = False
 
             return jsonify(
                 {
@@ -294,6 +375,7 @@ def image_processing():
                     },
                 }
             )
+            
         else:
             return jsonify(
                 {
@@ -350,59 +432,114 @@ def navigate_decades(direction):
     return redirect(url_for("main_interface"))
 
 
-@app.route("/play_music", methods=["GET"])
-@require_calibration
+@app.route("/play_music")
 def play_music():
-    country_code = session.get("current_country")
-    decade = session.get("selected_decade")
+    global_shuffle_mode = session.get("global_shuffle", False)
+    
+    if global_shuffle_mode:
+        song_path, metadata = pick_random_song_from_archive()
+    else:
+        country_code = session.get("current_country")
+        decade = session.get("selected_decade")
+        if not country_code or not decade:
+            return jsonify({'status': 'error', 'message': 'Missing country or decade selection'})
+        song_path, metadata = pick_song(country_code, decade)
 
-    if not country_code or not decade:
-        return jsonify({"status": "error", "message": "Country or decade not selected"})
+    if not song_path:
+        return jsonify({'status': 'error', 'message': 'No songs found'})
 
-    try:
-        song_path, metadata = pick_song(country_code, decade, exclude_path=session.get("current_song"))
+    # Extract country info from path, similar to pick_random_song_from_archive
+    country_code, country_name = get_country_from_path(song_path)
+    metadata["country_code"] = country_code
+    metadata["country_name"] = country_name
 
-        if song_path:
-            session["current_song"] = song_path
-            session["current_decade"] = decade
+    # Store the current song path in the session
+    session["current_song"] = song_path
+    
+    song_info = {
+        'artist': metadata.get('artist', 'Unknown Artist'),
+        'title': metadata.get('title', 'Untitled'),
+        'year': metadata.get('year', 'Unknown Year'),
+    }
+    
+    # Store song info in session
+    session["song_info"] = song_info
 
-            return jsonify(
-                {
-                    "status": "success",
-                    "music_files": [
-                        os.path.basename(song_path)
-                    ],  
-                    "country": COUNTRIES.get(country_code, country_code),
-                    "decade": decade,
-                    "song_info": metadata,
-                    "play_url": f"/play/{os.path.basename(song_path)}",
-                }
-            )
-        else:
-            return jsonify(
-                {
-                    "status": "error",
-                    "message": f"No music found for {COUNTRIES.get(country_code, country_code)} in {decade}",
-                }
-            )
-    except Exception as e:
-        print(f"Error selecting music: {str(e)}")
-        return jsonify(
-            {"status": "error", "message": f"Error selecting music: {str(e)}"}
-        )
+    return jsonify({
+        'status': 'success',
+        'music_files': [os.path.basename(song_path)],
+        'song_info': song_info,
+        'country': metadata.get('country_name', 'Unknown')
+    })
+
 
 
 @app.route("/play/<filename>")
 def play(filename):
+    # First check if we have the current song path in the session
     song_path = session.get("current_song")
-
+    
+    # If we don't have a stored path, or the filename doesn't match, search for it
     if not song_path or os.path.basename(song_path) != filename:
-        song_path = search_song_by_filename(filename)
-
-    if not song_path:
-        return "Song not found", 404
-
+        # Search for the file in the archive
+        for root, dirs, files in os.walk(ARCHIVE_PATH):
+            for file in files:
+                if file == filename:
+                    song_path = os.path.join(root, file)
+                    # Update the session with the found path
+                    session["current_song"] = song_path
+                    break
+            if song_path and os.path.basename(song_path) == filename:
+                break
+    
+    if not song_path or not os.path.exists(song_path):
+        return f"Song not found: {filename}", 404
+    
     return send_file(song_path, mimetype="audio/mpeg")
+  
+
+@app.route("/global_shuffle", methods=["POST"])
+@require_calibration
+def global_shuffle():
+    try:
+        # Mark that we're in global shuffle mode
+        session["global_shuffle"] = True
+
+        # Clear other session keys
+        session.pop("current_country", None)
+        session.pop("selected_decade", None)
+        session.pop("current_song", None)
+
+        # Pick a random song from the archive
+        song_path, metadata = pick_random_song_from_archive()
+        if not song_path:
+            return jsonify({'status': 'error', 'message': 'No songs found in archive'}), 404
+
+        # Store the current song path in the session
+        session["current_song"] = song_path
+
+        # Prepare song info for display
+        song_info = {
+            'artist': metadata.get('artist', 'Unknown Artist'),
+            'title': metadata.get('title', 'Untitled'),
+            'year': metadata.get('year', 'Unknown Year'),
+        }
+
+        # Store song info in session
+        session["song_info"] = song_info
+
+        # Return in the same format as the play_music route
+        return jsonify({
+            'status': 'success',
+            'music_files': [os.path.basename(song_path)],
+            'song_info': song_info,
+            'country': metadata.get('country_name', 'Unknown'),
+            'country_code': metadata.get('country_code', '')
+        })
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'message': f'Error: {str(e)}'}), 500
 
 
 # ------------------------------

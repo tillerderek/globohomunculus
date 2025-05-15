@@ -859,6 +859,32 @@ function animateRecalibrationOverlay() {
   }
 }
 
+function startShuffleOverlay() {
+  shuffleHeld = true;
+  shuffleStartTime = Date.now();
+
+  // Cancel any existing frame
+  if (shuffleAnimationFrame) {
+    cancelAnimationFrame(shuffleAnimationFrame);
+    shuffleAnimationFrame = null;
+  }
+
+  animateShuffleOverlay();
+}
+
+function stopShuffleOverlay() {
+  shuffleHeld = false;
+
+  if (shuffleAnimationFrame) {
+    cancelAnimationFrame(shuffleAnimationFrame);
+    shuffleAnimationFrame = null;
+  }
+
+  // Clear the overlay
+  octx.clearRect(0, 0, overlay.width, overlay.height);
+}
+
+
 function toggleMetadataDisplay() {
   const metadataDisplay = document.getElementById('metadata-display');
   if (metadataDisplay) {
@@ -867,68 +893,106 @@ function toggleMetadataDisplay() {
   }
 }
 
-// Initialize
-// Initialize
+// --- Initialization ---
 initCamera();
-window.addEventListener('resize', resize);
+window.addEventListener('resize', () => {
+  resize();
+  positionOverlayContent();
+});
 resize();
-positionOverlayContent(); // Position the overlay content when page loads
-drawRadarOverlay(); // Start the radar animation
+positionOverlayContent();
+drawRadarOverlay();
 
-// Make sure to add these keyboard event listeners in your HTML or add them here
-document.addEventListener('keydown', function (e) {
-  // Enter key for capture
-  console.log('Key pressed:', e.key);
-  if (e.key === 'Enter' && !isCameraProcessing) {
-    captureAndSend();
-  }
+// Preload recalibration sound element once
+const recalSound = document.getElementById('recal-sound');
 
-  // Escape key for recalibration start
-  if (e.key === 'Backspace' && !escHeld) {
-    escHeld = true;
-    escStartTime = Date.now();
-    startRecalibrationOverlay();
-  }
+// --- Keyboard Event Handlers ---
 
-  if (e.key === '+' && !isCameraProcessing) {
-    const video = document.getElementById('camera');
+document.addEventListener('keydown', (e) => {
+  const key = e.key;
 
-    if (!video.srcObject) {
-      // Camera is off, so turn it on
-      initCamera();
-      resetCameraShutdownTimer(); // Start auto-shutdown timer
+  console.log('Key pressed:', key);
 
-      // Hide metadata when camera is on
-      document.getElementById('metadata-display').style.display = 'none';
-    } else {
-      // Camera is on, so turn it off
-      const tracks = video.srcObject.getTracks();
-      tracks.forEach((track) => track.stop());
-      video.srcObject = null;
-
-      // Cancel auto-shutdown if it was running
-      if (autoCameraShutdownTimer) {
-        clearTimeout(autoCameraShutdownTimer);
-        autoCameraShutdownTimer = null;
+  switch (key) {
+    case 'Enter':
+      if (!isCameraProcessing) {
+        captureAndSend();
       }
+      break;
 
-      // Show metadata when camera is off
-      document.getElementById('metadata-display').style.display = 'block';
-    }
-  }
+    case 'Backspace':
+      if (!escHeld) {
+        escHeld = true;
+        escStartTime = Date.now();
+        startRecalibrationOverlay();
 
-  // Subtract key or NumpadSubtract to navigate home
-  if (e.key === 'Subtract' || e.code === 'NumpadSubtract') {
-    window.location.href = '/';
+        // Play recalibration sound from the start
+        if (recalSound) {
+          recalSound.currentTime = 0;
+          recalSound.play().catch(err => console.warn('Audio play error:', err));
+        }
+      }
+      break;
+
+    case '+':
+      if (!isCameraProcessing) {
+        toggleCamera();
+      }
+      break;
+
+    case 'Subtract':
+      window.location.href = '/';
+      break;
+
+    default:
+      // Check for NumpadSubtract separately, because its e.key is 'Subtract' but code is 'NumpadSubtract'
+      if (e.code === 'NumpadSubtract') {
+        window.location.href = '/';
+      }
   }
 });
 
-document.addEventListener('keyup', function (e) {
-  // Escape key for recalibration stop
+document.addEventListener('keyup', (e) => {
   if (e.key === 'Backspace' && escHeld) {
     escHeld = false;
     const elapsed = Date.now() - escStartTime;
     const completed = elapsed >= 3000;
     stopRecalibrationOverlay(completed);
+
+    // Stop and reset recalibration sound
+    if (recalSound) {
+      recalSound.pause();
+      recalSound.currentTime = 0;
+    }
   }
 });
+
+// --- Helper Function to toggle camera on/off ---
+function toggleCamera() {
+  const video = document.getElementById('camera');
+
+  if (!video.srcObject) {
+    // Camera is off, so turn it on
+    initCamera();
+    resetCameraShutdownTimer(); // Start auto-shutdown timer
+
+    // Hide metadata when camera is on
+    document.getElementById('metadata-display').style.display = 'none';
+  } else {
+    // Camera is on, so turn it off
+    const tracks = video.srcObject.getTracks();
+    tracks.forEach(track => track.stop());
+    video.srcObject = null;
+
+    // Cancel auto-shutdown if it was running
+    if (autoCameraShutdownTimer) {
+      clearTimeout(autoCameraShutdownTimer);
+      autoCameraShutdownTimer = null;
+    }
+
+    // Show metadata when camera is off
+    document.getElementById('metadata-display').style.display = 'block';
+  }
+}
+
+

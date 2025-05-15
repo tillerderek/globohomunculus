@@ -102,3 +102,8 @@ html, body {
 #music-player {
   display: none !important;
 }
+
+.hidden {
+  display: none !important;
+}
+
