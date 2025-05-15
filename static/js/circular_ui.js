@@ -316,12 +316,11 @@ function drawGridLines(radius) {
 function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight) {
   const words = text.split(' ');
   let line = '';
-  let lines = [];
+  const lines = [];
 
   for (let n = 0; n < words.length; n++) {
     const testLine = line + words[n] + ' ';
-    const metrics = ctx.measureText(testLine);
-    const testWidth = metrics.width;
+    const testWidth = ctx.measureText(testLine).width;
     if (testWidth > maxWidth && n > 0) {
       lines.push(line.trim());
       line = words[n] + ' ';
@@ -331,14 +330,18 @@ function drawWrappedText(ctx, text, x, y, maxWidth, lineHeight) {
   }
   lines.push(line.trim());
 
-  // Adjust starting y to center block vertically
+  // Set alignment to center
+  ctx.textAlign = 'center';
+
+  // Vertically center the whole block
   const totalHeight = lines.length * lineHeight;
-  let startY = y - totalHeight / 2 + lineHeight / 2;
+  const startY = y - totalHeight / 2 + lineHeight / 2;
 
   for (let i = 0; i < lines.length; i++) {
     ctx.fillText(lines[i], x, startY + i * lineHeight);
   }
 }
+
 
 function captureAndSend() {
   if (isCameraProcessing) return;
@@ -373,6 +376,11 @@ function captureAndSend() {
 
   // Begin processing
   isCameraProcessing = true;
+  // Auto-hide metadata display during processing
+  const metadataDisplay = document.getElementById('metadata-display');
+  if (metadataDisplay) {
+    metadataDisplay.style.display = 'none';
+  }
   processingProgress = 0;
   drawRadarOverlay();
 
@@ -615,7 +623,7 @@ function showResultsOverlay(data) {
   octx.clearRect(0, 0, overlay.width, overlay.height);
   const outerRadius = diameter / 2;
 
-  // Draw the circular frame
+  // Draw the main circle stroke first (so it’s not clipped)
   octx.beginPath();
   octx.arc(x, y, outerRadius, 0, Math.PI * 2);
   octx.strokeStyle = 'rgba(0, 230, 80, 0.8)';
@@ -624,27 +632,33 @@ function showResultsOverlay(data) {
   octx.shadowColor = 'rgba(0, 255, 90, 0.7)';
   octx.stroke();
 
-  // Draw completion indicator
+  // Save and clip for internal drawing
+  octx.save();
+  octx.beginPath();
+  octx.arc(x, y, outerRadius - 10, 0, Math.PI * 2);
+  octx.clip();
+
+  // Draw inner completion indicator
   octx.beginPath();
   octx.arc(x, y, outerRadius - 20, 0, Math.PI * 2);
   octx.strokeStyle = 'rgba(0, 255, 120, 0.4)';
   octx.lineWidth = 2;
   octx.stroke();
 
-  // Add some CRT scan noise
+  // CRT scan noise
   addScanNoise(outerRadius);
 
-  // Title
+  // Title (with text wrapping if necessary)
   octx.fillStyle = 'rgba(0, 255, 170, 1)';
   octx.font = 'bold 22px monospace';
   octx.textAlign = 'center';
   octx.fillText('ANALYSIS COMPLETE', x, y - 40);
 
-  // Footer
+  // Footer text (wrapped if necessary)
   octx.font = '14px monospace';
-  octx.fillText('REDIRECTING TO COUNTRY VIEW...', x, y + outerRadius - 40);
+  drawWrappedText(octx, 'REDIRECTING TO COUNTRY VIEW...', x, y + outerRadius - 40, outerRadius * 1.8, 18);
 
-  // Extract and display the detected country name
+  // Country extraction (wrapped)
   let countryName = 'Unknown';
   if (data.result) {
     if (typeof data.result === 'object' && data.result.country) {
@@ -654,16 +668,20 @@ function showResultsOverlay(data) {
     }
   }
 
-  // Display the country name
+  // Draw country name (with wrapping)
   octx.font = 'bold 24px monospace';
-  octx.fillText(`DETECTED: ${countryName}`, x, y + 20);
+  drawWrappedText(octx, `DETECTED: ${countryName}`, x, y + 20, outerRadius * 1.8, 24);
 
-  // Update the HTML display if available
+  // Restore unclipped context
+  octx.restore();
+
+  // Update any HTML
   if (countryDisplay) {
     countryDisplay.innerText = `Detected: ${countryName}`;
-    // Don't show this yet - we'll show it after redirect
   }
 }
+
+
 
 function showErrorOverlay(errorMessage) {
   octx.clearRect(0, 0, overlay.width, overlay.height);
@@ -685,16 +703,19 @@ function showErrorOverlay(errorMessage) {
   octx.fillStyle = 'rgba(255, 80, 80, 1)';
   octx.font = 'bold 22px monospace';
   octx.textAlign = 'center';
-  octx.fillText('ERROR', x, y - 20);
+  octx.fillText('ERROR', x, y - 80); // <-- Shifted higher
 
-  // Error message
+  // Error message (wrapped)
   octx.fillStyle = 'rgba(255, 150, 150, 1)';
   octx.font = '16px monospace';
-  octx.fillText(errorMessage, x, y + 20);
+  const maxWidth = diameter * 0.8;
+  const lineHeight = 20;
+  const messageY = y; // Centered in the middle
+  drawWrappedText(octx, errorMessage, x, messageY, maxWidth, lineHeight);
 
   // Footer
   octx.font = '14px monospace';
-  octx.fillText('PRESS ENTER TO TRY AGAIN', x, y + 60);
+  octx.fillText('PRESS ENTER TO TRY AGAIN', x, y + 80); // <-- Shifted lower
 }
 
 function startRecalibrationOverlay() {

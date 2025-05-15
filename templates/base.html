@@ -38,8 +38,10 @@
           audio.src = `/play/${data.music_files[0]}`;
           audio.style.display = 'block';
           audio.play();
+          audio.onended = () => {
+            playMusic(); // Fetch and play the next song when current one ends
+          };
 
-          // 🆕 Update metadata display
           const metadata = document.getElementById('metadata-content');
           metadata.innerHTML = `
             <div><strong>${data.song_info.artist}</strong></div>
@@ -56,7 +58,6 @@
       });
   }
 
-  // 🆕 Add key watchers for [ and ] and spacebar
   document.addEventListener('keydown', function (e) {
     if (e.key === '[') {
       window.location.href = "{{ url_for('navigate_decades', direction='prev') }}";

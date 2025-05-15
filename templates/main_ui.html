@@ -45,37 +45,26 @@
 
 <script src="{{ url_for('static', filename='js/circular_ui.js') }}"></script>
 <script>
-  let keyPressTimer;
+  const musicPlayer = document.getElementById('music-player');
+
   document.addEventListener('keydown', function (e) {
-    if (e.key === '0' && !keyPressTimer) {
-      keyPressTimer = setTimeout(() => {
-        console.log('Long press detected - starting shuffle mode');
-        fetch('/shuffle_mode')
-          .then((response) => response.json())
-          .then((data) => {
-            if (data.status === 'success') {
-              // Do something with the song, like play it
-              const audio = new Audio(data.file);
-              audio.play();
-
-              document.getElementById('metadata-content').innerHTML = `
-                <p><strong>Filename:</strong> ${data.song_info.filename}</p>
-                <p><strong>Country:</strong> ${data.song_info.country}</p>
-                <p><strong>Decade:</strong> ${data.song_info.decade}</p>
-                `;
-            }
-          });
-      }, 1000); // 1000ms = 1 second long press
-    }
-  });
-
-  document.addEventListener('keyup', function (e) {
-    if (e.key === '0') {
-      clearTimeout(keyPressTimer);
-      keyPressTimer = null;
+    if (e.code === 'Numpad4') {
+      // Skip backward (e.g., go back 10 seconds)
+      musicPlayer.currentTime = Math.max(0, musicPlayer.currentTime - 10);
+    } else if (e.code === 'Numpad5') {
+      // Play/Pause toggle
+      if (musicPlayer.paused) {
+        musicPlayer.play();
+      } else {
+        musicPlayer.pause();
+      }
+    } else if (e.code === 'Numpad6') {
+      // Skip forward (e.g., jump ahead 10 seconds)
+      musicPlayer.currentTime = Math.min(musicPlayer.duration, musicPlayer.currentTime + 10);
     }
   });
 </script>
+
 
 
 {% endblock %}

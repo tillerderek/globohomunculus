@@ -1,0 +1,8 @@
+[2025-05-14 23:40:27 -0400] [1773390] [INFO] Starting gunicorn 20.1.0
+[2025-05-14 23:40:27 -0400] [1773390] [INFO] Listening at: http://127.0.0.1:5000 (1773390)
+[2025-05-14 23:40:27 -0400] [1773390] [INFO] Using worker: sync
+[2025-05-14 23:40:27 -0400] [1773392] [INFO] Booting worker with pid: 1773392
+[2025-05-14 23:46:10 -0400] [1773390] [INFO] Handling signal: hup
+[2025-05-14 23:46:10 -0400] [1773390] [INFO] Hang up: Master
+[2025-05-14 23:46:10 -0400] [1777171] [INFO] Booting worker with pid: 1777171
+[2025-05-14 23:46:10 -0400] [1773390] [WARNING] Worker with pid 1773392 was terminated due to signal 1

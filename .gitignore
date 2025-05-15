@@ -128,3 +128,10 @@ poetry.lock
 # pytest logs
 pytestdebug.log
 
+#certificates
+*.pem
+*.crt
+*.key
+
+#
+

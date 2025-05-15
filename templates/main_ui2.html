@@ -1,0 +1,177 @@
+{% extends "base.html" %} {% block content %}
+<video id="camera" autoplay playsinline></video>
+
+<canvas id="mask"></canvas>
+<canvas id="overlay"></canvas>
+
+<div id="overlay-content">
+  
+  <div id="metadata-display">
+    {% if country_code %}
+    <div id="country-name-display">
+      <h2>{{ country_name or country_code }}</h2>
+    </div>
+    {% endif %}
+    <div id="metadata-content">
+      {% if song_info %}
+        <p><strong>Title:</strong> {{ song_info.title or "Unknown" }}</p>
+        <p><strong>Artist:</strong> {{ song_info.artist or "Unknown" }}</p>
+        <p><strong>Year:</strong> {{ song_info.year or "Unknown" }}</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if country_code %}
+  <div id="decades-nav">
+    <div>
+      <button
+        onclick="location.href='{{ url_for('navigate_decades', direction='prev') }}'"
+      >
+        ←
+      </button>
+      <span id="current-decade">{{ selected_decade or 'Select Decade' }}</span>
+      <button
+        onclick="location.href='{{ url_for('navigate_decades', direction='next') }}'"
+      >
+        →
+      </button>
+    </div>
+    <button id="playMusicButton" onclick="playMusic()">Play Music</button>
+  </div>
+  {% endif %}
+</div>
+
+<audio id="music-player" controls></audio>
+
+<script>
+  const x = {{ x|tojson }};
+  const y = {{ y|tojson }};
+  const diameter = {{ diameter|tojson }};
+</script>
+
+<script src="{{ url_for('static', filename='js/circular_ui.js') }}"></script>
+
+<script>
+  // Initialize music player
+  const musicPlayer = document.getElementById('music-player');
+  
+  // Function to update metadata display
+  function updateMetadata(songInfo) {
+    const metaDiv = document.getElementById('metadata-content');
+    if (metaDiv && songInfo) {
+      let html = '';
+      
+      if (songInfo.title) {
+        html += `<p><strong>Title:</strong> ${songInfo.title}</p>`;
+      }
+      
+      if (songInfo.artist) {
+        html += `<p><strong>Artist:</strong> ${songInfo.artist}</p>`;
+      }
+      
+      if (songInfo.year) {
+        html += `<p><strong>Year:</strong> ${songInfo.year}</p>`;
+      }
+      
+      if (html === '' && songInfo.filename) {
+        html += `<p><strong>Filename:</strong> ${songInfo.filename}</p>`;
+      }
+      
+      metaDiv.innerHTML = html;
+    }
+  }
+
+  // Function to play music
+  function playMusic() {
+    fetch('/play_music')
+      .then(response => response.json())
+      .then(data => {
+        if (data.status === 'success') {
+          musicPlayer.src = data.play_url;
+          musicPlayer.play();
+          updateMetadata(data.song_info);
+          document.getElementById('playMusicButton').style.display = 'none';
+        } else {
+          console.error(data.message);
+          alert(`Error: ${data.message}`);
+        }
+      })
+      .catch(error => {
+        console.error('Error starting playback:', error);
+      });
+  }
+  
+  // Load next song when current song ends
+  musicPlayer.addEventListener('ended', () => {
+    loadNextSong();
+  });
+  
+  // Function to load next song
+  function loadNextSong() {
+    fetch('/next_song')
+      .then(response => response.json())
+      .then(data => {
+        if (data.status === 'success') {
+          musicPlayer.src = data.play_url;
+          musicPlayer.play();
+          updateMetadata(data.song_info);
+        } else {
+          document.getElementById('playMusicButton').style.display = 'block';
+        }
+      })
+      .catch(error => {
+        console.error('Error loading next song:', error);
+        document.getElementById('playMusicButton').style.display = 'block';
+      });
+  }
+  
+  // Key press handlers
+  document.addEventListener('keydown', function(e) {
+    if (e.key === '0') {
+      startLongPressTimer();
+    }
+    else if (e.code === 'Numpad5') {
+      if (musicPlayer.paused) {
+        musicPlayer.play();
+      } else {
+        musicPlayer.pause();
+      }
+    }
+    else if (e.code === 'Numpad6') {
+      loadNextSong();
+    }
+  });
+  
+  // Shuffle mode with long press
+  let keyPressTimer;
+  
+  function startLongPressTimer() {
+    if (!keyPressTimer) {
+      keyPressTimer = setTimeout(() => {
+        fetch('/shuffle')
+          .then(response => response.json())
+          .then(data => {
+            if (data.status === 'shuffle_enabled') {
+              loadNextSong();
+            }
+          });
+      }, 1000);
+    }
+  }
+  
+  document.addEventListener('keyup', function(e) {
+    if (e.key === '0') {
+      clearTimeout(keyPressTimer);
+      keyPressTimer = null;
+    }
+  });
+  
+  // Show play button when ready
+  document.addEventListener('DOMContentLoaded', function() {
+    const playButton = document.getElementById('playMusicButton');
+    if (playButton && "{{ country_code }}" && "{{ selected_decade }}") {
+      playButton.style.display = 'block';
+    }
+  });
+</script>
+{% endblock %}
