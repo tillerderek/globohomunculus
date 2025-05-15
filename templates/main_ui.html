@@ -45,6 +45,7 @@
 
 <audio id="music-player" controls></audio>
 <audio id="shuffleSound" src="{{ url_for('static', filename='sounds/shuffler.wav') }}" preload="auto" loop></audio>
+<audio id="recal-sound" src="{{ url_for('static', filename='sounds/recal.wav') }}" preload="auto"></audio>
 
 <script>
   const x = {{ x|tojson }};
